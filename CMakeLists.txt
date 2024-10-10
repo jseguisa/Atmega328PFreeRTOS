@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-set(PROJECT_NAME free-rtos-demo)
+set(PROJECT_NAME m328p_freertos)
 set(CMAKE_TOOLCHAIN_FILE avr-gcc.toolchain.cmake)
 
 project(${PROJECT_NAME} C CXX)
@@ -7,11 +7,11 @@ project(${PROJECT_NAME} C CXX)
 ## AVR Chip Configuration
 # 8Mhz, this should match the crystal on your board,
 # I use 8Mhz and 3.3V for the lowest power consumption
-set(F_CPU 16000000UL)
+set(F_CPU 8000000UL)
 
 # CPU, you can find the list here:
 # https://gcc.gnu.org/onlinedocs/gcc/AVR-Options.html
-set(MCU atmega328p)
+set(MCU atmega323)
 
 # Default Baudrate for UART, read avr include/util/setbaud.h for usage
 set(BAUD 9600)
@@ -22,6 +22,7 @@ FetchContent_Declare(
     freertos_kernel
     GIT_REPOSITORY https://github.com/FreeRTOS/FreeRTOS-Kernel.git
     GIT_TAG        V11.1.0
+    EXCLUDE_FROM_ALL
 )
 
 add_library(freertos_config INTERFACE)
@@ -38,19 +39,86 @@ endif()
 
 FetchContent_MakeAvailable(freertos_kernel)
 
-target_compile_definitions(freertos_config INTERFACE ${definitions} -DF_CPU=${F_CPU})
-target_compile_options(freertos_config INTERFACE ${options})
+# target_compile_options(freertos_config INTERFACE ${options})
+# target_compile_definitions(freertos_config INTERFACE ${definitions} -DF_CPU=${F_CPU})
+
+target_include_directories(freertos_kernel_port PRIVATE
+    include
+    ${freertos_kernel_SOURCE_DIR}/portable/GCC/ATMega323
+)
+
+# Load all files in src folder
+file(GLOB SOURCES
+    src/main.c
+    src/ParTest/ParTest.c
+    src/serial/serial.c
+    src/regtest.c
+    ${freertos_kernel_SOURCE_DIR}/tasks.c
+    ${freertos_kernel_SOURCE_DIR}/queue.c
+    ${freertos_kernel_SOURCE_DIR}/list.c
+    ${freertos_kernel_SOURCE_DIR}/croutine.c
+    ${freertos_kernel_SOURCE_DIR}/portable/MemMang/heap_1.c
+    ${freertos_kernel_SOURCE_DIR}/portable/GCC/ATMega323/port.c
+    src/Minimal/crflash.c
+    src/Minimal/integer.c
+    src/Minimal/PollQ.c
+    src/Minimal/comtest.c
+)
+
+add_avr_executable(${PROJECT_NAME} ${SOURCES})
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    include
+    include/Minimal
+    ${freertos_kernel_SOURCE_DIR}/include
+    ${freertos_kernel_SOURCE_DIR}/portable/GCC/ATMega323
+)
+
+# Compilation flags
+target_compile_options(${PROJECT_NAME} PRIVATE
+    -mmcu=${MCU}
+    -g
+    -Os
+    -w
+    -std=gnu++11
+    -fno-exceptions
+    -ffunction-sections
+    -fdata-sections
+    -fno-threadsafe-statics
+    -gdwarf-2
+    -funsigned-char
+    -funsigned-bitfields
+    -fpack-struct
+    -fshort-enums
+    -ffunction-sections
+    -fdata-sections
+    -fno-split-wide-types
+    -fno-tree-scev-cprop
+    -Wall
+    -Wno-main
+    -Wundef
+    -pedantic
+    -Wstrict-prototypes
+    -Werror
+    -Wfatal-errors
+    -Wl,--relax,--gc-sections
+)
 
 # Pass defines to compiler
-add_definitions(
+target_compile_definitions(${PROJECT_NAME} PRIVATE
     -DF_CPU=${F_CPU}
     -DBAUD=${BAUD}
 )
 
-include_directories(include)
-
-file(GLOB_RECURSE SOURCES src/*.c src/*.cpp) # Load all files in src folder
-add_avr_executable(${PROJECT_NAME} ${MCU} ${SOURCES})
+# Linker flags
+target_link_options(${PROJECT_NAME} PRIVATE
+    -mmcu=${MCU}
+    -lc
+    -lm
+    -lgcc
+    -Wl,-lprintf_flt
+    -Wl,-u,vfprintf
+)
 
 
 # The programmer to use, read avrdude manual for list
@@ -80,7 +148,7 @@ set(LOCK_BIT 0xff)
 # add_custom_target(eeprom avr-objcopy -j .eeprom  --set-section-flags=.eeprom="alloc,load"  --change-section-lma .eeprom=0 -O ihex ${PROJECT_NAME}.elf ${PROJECT_NAME}.eep DEPENDS strip)
 
 # Upload the firmware with avrdude
-# add_custom_target(upload avrdude -c ${PROG_TYPE} -p ${MCU_PART_NO} -U flash:w:${PROJECT_NAME}.hex DEPENDS hex)
+add_custom_target(upload avrdude -c ${PROG_TYPE} -p ${MCU_PART_NO} -U flash:w:${PROJECT_NAME}.hex DEPENDS ${PROJECT_NAME}_flash_files)
 
 # Upload the eeprom with avrdude
 # add_custom_target(upload_eeprom avrdude -c ${PROG_TYPE} -p ${MCU_PART_NO} -U eeprom:w:${PROJECT_NAME}.eep DEPENDS eeprom)

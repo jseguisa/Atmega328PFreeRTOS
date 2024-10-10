@@ -70,61 +70,16 @@ find_program(AVR_UPLOAD
         $ENV{AVR_ROOT}
 )
 
-# Macro for adding precompiled libraries
-macro(add_avr_libraries target_name avr_mcu)
-    target_link_libraries(
-        ${target_name}-${avr_mcu}.elf
-        ${ARGN}
-    )
-endmacro()
-
-macro(add_avr_executable target_name avr_mcu)
-    set(CMAKE_EXE_LINKER_FLAGS -mmcu=${avr_mcu})
-
-    set(elf_file ${target_name}-${avr_mcu}.elf)
-    set(map_file ${target_name}-${avr_mcu}.map)
-    set(hex_file ${target_name}-${avr_mcu}.hex)
-    set(lst_file ${target_name}-${avr_mcu}.lst)
+macro(add_avr_executable target_name)
+    set(elf_file ${target_name}.elf)
+    set(map_file ${target_name}.map)
+    set(hex_file ${target_name}.hex)
+    set(lst_file ${target_name}.lst)
 
     # create elf file
-    add_executable(${elf_file} ${ARGN})
-
-    target_compile_options(${elf_file} PUBLIC
-        -mmcu=${avr_mcu}
-        -g
-        -Os
-        -w
-        -std=gnu++11
-        -fno-exceptions
-        -ffunction-sections
-        -fdata-sections
-        -fno-threadsafe-statics
-        -gdwarf-2
-        -funsigned-char
-        -funsigned-bitfields
-        -fpack-struct
-        -fshort-enums
-        -ffunction-sections
-        -fdata-sections
-        -fno-split-wide-types
-        -fno-tree-scev-cprop
-        -Wall
-        -Wno-main
-        -Wundef
-        -pedantic
-        -Wstrict-prototypes
-        -Werror
-        -Wfatal-errors
-        -Wl,--relax,--gc-sections)
-
-    target_link_options(${elf_file} PUBLIC
-        -mmcu=${avr_mcu}
-        -Wl,-Map,${map_file}
-        -lc
-        -lm
-        -lgcc
-        -Wl,-lprintf_flt
-        -Wl,-u,vfprintf)
+    add_executable(${target_name} ${ARGN})
+    target_link_options(${target_name} PUBLIC -Wl,-Map,${map_file})
+    set_target_properties(${target_name} PROPERTIES OUTPUT_NAME ${elf_file})
 
     # generate the lst file
     add_custom_command(
@@ -133,7 +88,7 @@ macro(add_avr_executable target_name avr_mcu)
         COMMAND
             ${CMAKE_OBJDUMP} -h -S ${elf_file} > ${lst_file}
 
-        DEPENDS ${elf_file}
+        DEPENDS ${target_name}
     )
 
     # create hex file
@@ -143,29 +98,18 @@ macro(add_avr_executable target_name avr_mcu)
         COMMAND
             ${CMAKE_OBJCOPY} -j .text -j .data -O ihex ${elf_file} ${hex_file}
 
-        DEPENDS ${elf_file}
+        DEPENDS ${target_name}
     )
 
     add_custom_command(
-        OUTPUT "print-size-${elf_file}"
+        OUTPUT "print-size-${target_name}"
 
         COMMAND
             ${AVR_SIZE} ${elf_file}
 
-        DEPENDS ${elf_file}
+        DEPENDS ${target_name}
     )
 
     # build the intel hex file for the device
-    add_custom_target(
-        ${target_name}
-        ALL
-        DEPENDS ${hex_file} ${lst_file} "print-size-${elf_file}"
-    )
-
-    set_target_properties(
-        ${target_name}
-
-        PROPERTIES
-            OUTPUT_NAME ${elf_file}
-    )
+    add_custom_target(${target_name}_flash_files ALL DEPENDS ${hex_file} ${lst_file} "print-size-${target_name}")
 endmacro(add_avr_executable)

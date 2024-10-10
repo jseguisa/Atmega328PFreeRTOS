@@ -1,6 +1,6 @@
 /*
- * FreeRTOS Kernel V10.4.1
- * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * FreeRTOS V202212.00
+ * Copyright (C) 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -19,14 +19,15 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
- * http://www.FreeRTOS.org
- * http://aws.amazon.com/freertos
+ * https://www.FreeRTOS.org
+ * https://github.com/FreeRTOS
  *
- * 1 tab == 4 spaces!
  */
 
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
+
+#include <avr/io.h>
 
 /*-----------------------------------------------------------
  * Application specific definitions.
@@ -39,43 +40,24 @@
  *
  * See http://www.freertos.org/a00110.html
  *----------------------------------------------------------*/
-/* Clock setting. */
-#define configCPU_CLOCK_HZ			( ( unsigned long ) F_CPU )
-#define configTICK_RATE_HZ			( ( TickType_t ) 1000 )
-
-/* FreeRTOS kernel tick data width. */
-#define configUSE_16_BIT_TICKS			1
-
-/* FreeRTOS task configuration. */
-#define configMAX_PRIORITIES		( 4 )
-#define configMAX_TASK_NAME_LEN		( 8 )
 
 #define configUSE_PREEMPTION		1
-#define configUSE_TIME_SLICING		0
-#define configIDLE_SHOULD_YIELD		1
-
 #define configUSE_IDLE_HOOK			1
 #define configUSE_TICK_HOOK			0
-
-/* FreeRTOS debugging and tracing. */
-#define configQUEUE_REGISTRY_SIZE	0
+#define configCPU_CLOCK_HZ			( ( unsigned long ) 8000000 )
+#define configTICK_RATE_HZ			( ( TickType_t ) 1000 )
+#define configMAX_PRIORITIES		( 4 )
+#define configMINIMAL_STACK_SIZE	( ( unsigned short ) 85 )
+#define configTOTAL_HEAP_SIZE		( (size_t ) ( 1500 ) )
+#define configMAX_TASK_NAME_LEN		( 8 )
 #define configUSE_TRACE_FACILITY	0
+#define configUSE_16_BIT_TICKS		1
+#define configIDLE_SHOULD_YIELD		1
+#define configQUEUE_REGISTRY_SIZE	0
 
-/* FreeRTOS software timer. */
-#define configUSE_TIMERS				1
-#define configTIMER_TASK_PRIORITY		2
-#define configTIMER_QUEUE_LENGTH		5
-#define configTIMER_TASK_STACK_DEPTH	configMINIMAL_STACK_SIZE
-
-/* FreeRTOS memory allocation scheme. */
-#define configSUPPORT_DYNAMIC_ALLOCATION	1
-#define configSUPPORT_STATIC_ALLOCATION		1
-
-/* FreeRTOS memory management. */
-#define configMINIMAL_STACK_SIZE	( ( unsigned short ) 90 )
-#define configTOTAL_HEAP_SIZE		( (size_t ) ( 1000 ) )
-
-#define configCHECK_FOR_STACK_OVERFLOW		1
+/* Co-routine definitions. */
+#define configUSE_CO_ROUTINES 		1
+#define configMAX_CO_ROUTINE_PRIORITIES ( 2 )
 
 /* Set the following definitions to 1 to include the API function, or zero
 to exclude the API function. */
