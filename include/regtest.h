@@ -28,7 +28,6 @@
 #define REG_TEST_H
 
 void vStartRegTestTasks( void );
-portBASE_TYPE xAreRegTestTasksStillRunning( void );
+BaseType_t xAreRegTestTasksStillRunning( void );
 
 #endif
-

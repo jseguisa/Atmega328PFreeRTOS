@@ -24,228 +24,184 @@
  *
  */
 
-/*
- * Creates all the demo application tasks, then starts the scheduler.  The WEB
- * documentation provides more details of the demo application tasks.
- *
- * Main. c also creates a task called "Check".  This only executes every three
- * seconds but has the highest priority so is guaranteed to get processor time.
- * Its main function is to check that all the other tasks are still operational.
- * Each task that does not flash an LED maintains a unique count that is
- * incremented each time the task successfully completes its function.  Should
- * any error occur within such a task the count is permanently halted.  The
- * check task inspects the count of each task to ensure it has changed since
- * the last time the check task executed.  If all the count variables have
- * changed all the tasks are still executing error free, and the check task
- * toggles an LED.  Should any task contain an error at any time the LED toggle
- * will stop.
- *
- * The LED flash and communications test tasks do not maintain a count.
- */
-
-/*
- * Changes from V1.2.0
- *
- + Changed the baud rate for the serial test from 19200 to 57600.
- +
- + Changes from V1.2.3
- +
- + The integer and comtest tasks are now used when the cooperative scheduler
- +    is being used.  Previously they were only used with the preemptive
- +    scheduler.
- +
- + Changes from V1.2.5
- +
- + Set the baud rate to 38400.  This has a smaller error percentage with an
- +    8MHz clock (according to the manual).
- +
- + Changes from V2.0.0
- +
- + Delay periods are now specified using variables and constants of
- +    TickType_t rather than unsigned long.
- +
- + Changes from V2.6.1
- +
- + The IAR and WinAVR AVR ports are now maintained separately.
- +
- + Changes from V4.0.5
- +
- + Modified to demonstrate the use of co-routines.
- +
- */
-
-#include <stdlib.h>
-#include <string.h>
-
-#ifdef GCC_MEGA_AVR
-    /* EEPROM routines used only with the WinAVR compiler. */
-    #include <avr/eeprom.h>
-#endif
+#include <atmel_start.h>
 
 /* Scheduler include files. */
 #include "FreeRTOS.h"
 #include "task.h"
-#include "croutine.h"
 
-/* Demo file headers. */
-#include "PollQ.h"
-#include "integer.h"
-#include "serial.h"
-#include "comtest.h"
-#include "crflash.h"
-#include "print.h"
-#include "partest.h"
+/* Tests. */
 #include "regtest.h"
+#include "integer.h"
+#include "PollQ.h"
+#include "partest.h"
 
-/* Priority definitions for most of the tasks in the demo application.  Some
- * tasks just use the idle priority. */
-#define mainLED_TASK_PRIORITY       ( tskIDLE_PRIORITY + 1 )
-#define mainCOM_TEST_PRIORITY       ( tskIDLE_PRIORITY + 2 )
-#define mainQUEUE_POLL_PRIORITY     ( tskIDLE_PRIORITY + 2 )
-#define mainCHECK_TASK_PRIORITY     ( tskIDLE_PRIORITY + 3 )
-
-/* Baud rate used by the serial port tasks. */
-#define mainCOM_TEST_BAUD_RATE      ( ( unsigned long ) 38400 )
-
-/* LED used by the serial port tasks.  This is toggled on each character Tx,
- * and mainCOM_TEST_LED + 1 is toggles on each character Rx. */
-#define mainCOM_TEST_LED            ( 4 )
-
-/* LED that is toggled by the check task.  The check task periodically checks
- * that all the other tasks are operating without error.  If no errors are found
- * the LED is toggled.  If an error is found at any time the LED is never toggles
- * again. */
-#define mainCHECK_TASK_LED          ( 7 )
+/* Priority definitions for most of the tasks in the demo application. */
+#define mainCHECK_TASK_PRIORITY			( tskIDLE_PRIORITY + 3 )
+#define mainQUEUE_POLL_PRIORITY			( tskIDLE_PRIORITY + 2 )
+#define mainLED_BLINK_PRIORITY			( tskIDLE_PRIORITY + 2 )
 
 /* The period between executions of the check task. */
-#define mainCHECK_PERIOD            ( ( TickType_t ) 3000 / portTICK_PERIOD_MS )
+#define mainCHECK_PERIOD				( ( TickType_t ) 1000  )
 
-/* An address in the EEPROM used to count resets.  This is used to check that
- * the demo application is not unexpectedly resetting. */
-#define mainRESET_COUNT_ADDRESS     ( ( void * ) 0x50 )
+/* The period to toggle LED. */
+#define mainBLINK_LED_OK_HALF_PERIOD	( ( TickType_t ) 100 )
 
-/* The number of coroutines to create. */
-#define mainNUM_FLASH_COROUTINES    ( 3 )
+/* The task function for the "Check" task. */
+static void vErrorChecks( void *pvParameters );
 
-/*
- * The task function for the "Check" task.
- */
-static void vErrorChecks( void * pvParameters );
+/* The task function for blinking LED at a certain frequency. */
+static void vBlinkOnboardUserLED( void *pvParameters );
 
-/*
- * Checks the unique counts of other tasks to ensure they are still operational.
- * Flashes an LED if everything is okay.
- */
-static void prvCheckOtherTasksAreStillRunning( void );
+int main(void)
+{
+	/* Initializes MCU, drivers and middleware.
+	This is generated from Atmel START project. */
+	atmel_start_init();
 
-/*
- * Called on boot to increment a count stored in the EEPROM.  This is used to
- * ensure the CPU does not reset unexpectedly.
- */
-static void prvIncrementResetCount( void );
+	/* Standard register test. */
+	vStartRegTestTasks();
 
-/*
- * The idle hook is used to scheduler co-routines.
- */
-void vApplicationIdleHook( void );
+	/* Optionally enable below tests. This port only has 2KB RAM. */
+	vStartIntegerMathTasks( tskIDLE_PRIORITY );
+	vStartPolledQueueTasks( mainQUEUE_POLL_PRIORITY );
+	xTaskCreate( vBlinkOnboardUserLED, "LED", 50, NULL, mainCHECK_TASK_PRIORITY, NULL );
+
+	/* Create the tasks defined within this file. */
+	xTaskCreate( vErrorChecks, "Check", configMINIMAL_STACK_SIZE, NULL, mainLED_BLINK_PRIORITY, NULL );
+
+	/* In this port, to use preemptive scheduler define configUSE_PREEMPTION
+	as 1 in portmacro.h.  To use the cooperative scheduler define
+	configUSE_PREEMPTION as 0. */
+	vTaskStartScheduler();
+}
 
 /*-----------------------------------------------------------*/
-
-short main( void )
+static void vErrorChecks( void *pvParameters )
 {
-    prvIncrementResetCount();
+static UBaseType_t uxErrorHasOccurred = 0;
+BaseType_t xFirstTimeCheck = pdTRUE;
 
-    /* Setup the LED's for output. */
-    vParTestInitialise();
+	/* The parameters are not used. */
+	( void ) pvParameters;
 
-    /* Create the standard demo tasks. */
-    vStartIntegerMathTasks( tskIDLE_PRIORITY );
-    vAltStartComTestTasks( mainCOM_TEST_PRIORITY, mainCOM_TEST_BAUD_RATE, mainCOM_TEST_LED );
-    vStartPolledQueueTasks( mainQUEUE_POLL_PRIORITY );
-    vStartRegTestTasks();
+	/* Cycle for ever, delaying then checking all the other tasks are still
+	operating without error. */
+	for( ;; )
+	{
+		if( xAreRegTestTasksStillRunning() != pdTRUE )
+		{
+			uxErrorHasOccurred |= 0x01U ;
+		}
+		if( xAreIntegerMathsTaskStillRunning() != pdTRUE )
+		{
+			uxErrorHasOccurred |= ( 0x01U << 1);
+		}
+		if( xArePollingQueuesStillRunning() != pdTRUE )
+		{
+			uxErrorHasOccurred |= ( 0x01U << 2);
+		}
 
-    /* Create the tasks defined within this file. */
-    xTaskCreate( vErrorChecks, "Check", configMINIMAL_STACK_SIZE, NULL, mainCHECK_TASK_PRIORITY, NULL );
+		/* When check task runs before any other tasks, all above checks shall fail.
+		To avoid false alarm, clear errors upon first entry. */
+		if ( xFirstTimeCheck == pdTRUE )
+		{
+			uxErrorHasOccurred = 0;
+			xFirstTimeCheck = pdFALSE;
+		}
 
-    /* Create the co-routines that flash the LED's. */
-    vStartFlashCoRoutines( mainNUM_FLASH_COROUTINES );
-
-    /* In this port, to use preemptive scheduler define configUSE_PREEMPTION
-     * as 1 in portmacro.h.  To use the cooperative scheduler define
-     * configUSE_PREEMPTION as 0. */
-    vTaskStartScheduler();
-
-    return 0;
+		/* Could set break point at below line to verify uxErrorHasOccurred. */
+		vTaskDelay( mainCHECK_PERIOD );
+	}
 }
+
 /*-----------------------------------------------------------*/
-
-static void vErrorChecks( void * pvParameters )
+static void vBlinkOnboardUserLED( void *pvParameters )
 {
-    static volatile unsigned long ulDummyVariable = 3UL;
+	/* The parameters are not used. */
+	( void ) pvParameters;
 
-    /* The parameters are not used. */
-    ( void ) pvParameters;
+	/* Cycle forever, blink onboard user LED at a certain frequency. */
+	for( ;; )
+	{
+		vParTestToggleLED( 0 );
 
-    /* Cycle for ever, delaying then checking all the other tasks are still
-     * operating without error. */
-    for( ; ; )
-    {
-        vTaskDelay( mainCHECK_PERIOD );
+		vTaskDelay( mainBLINK_LED_OK_HALF_PERIOD );
+	}
 
-        /* Perform a bit of 32bit maths to ensure the registers used by the
-         * integer tasks get some exercise. The result here is not important -
-         * see the demo application documentation for more info. */
-        ulDummyVariable *= 3;
-
-        prvCheckOtherTasksAreStillRunning();
-    }
 }
-/*-----------------------------------------------------------*/
 
-static void prvCheckOtherTasksAreStillRunning( void )
-{
-    static portBASE_TYPE xErrorHasOccurred = pdFALSE;
-
-    if( xAreIntegerMathsTaskStillRunning() != pdTRUE )
-    {
-        xErrorHasOccurred = pdTRUE;
-    }
-
-    if( xAreComTestTasksStillRunning() != pdTRUE )
-    {
-        xErrorHasOccurred = pdTRUE;
-    }
-
-    if( xArePollingQueuesStillRunning() != pdTRUE )
-    {
-        xErrorHasOccurred = pdTRUE;
-    }
-
-    if( xAreRegTestTasksStillRunning() != pdTRUE )
-    {
-        xErrorHasOccurred = pdTRUE;
-    }
-
-    if( xErrorHasOccurred == pdFALSE )
-    {
-        /* Toggle the LED if everything is okay so we know if an error occurs even if not
-         * using console IO. */
-        vParTestToggleLED( mainCHECK_TASK_LED );
-    }
-}
-/*-----------------------------------------------------------*/
-
-static void prvIncrementResetCount( void )
-{
-    unsigned char ucCount;
-
-    eeprom_read_block( &ucCount, mainRESET_COUNT_ADDRESS, sizeof( ucCount ) );
-    ucCount++;
-    eeprom_write_byte( mainRESET_COUNT_ADDRESS, ucCount );
-}
 /*-----------------------------------------------------------*/
 
 void vApplicationIdleHook( void )
 {
-    vCoRoutineSchedule();
+	/* Doesn't do anything yet. */
 }
+
+/*-----------------------------------------------------------*/
+
+void vApplicationStackOverflowHook( TaskHandle_t xTask, char *pcTaskName )
+{
+	/* When stack overflow happens, trap instead of attempting to recover.
+	Read input arguments to learn about the offending task. */
+	for( ;; )
+	{
+		/* Doesn't do anything yet. */
+	}
+}
+
+/*-----------------------------------------------------------*/
+
+/* configSUPPORT_STATIC_ALLOCATION is set to 1, so the application must provide an
+implementation of vApplicationGetIdleTaskMemory() to provide the memory that is
+used by the Idle task. */
+void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer,
+                                    StackType_t **ppxIdleTaskStackBuffer,
+                                    uint32_t *pulIdleTaskStackSize )
+{
+/* If the buffers to be provided to the Idle task are declared inside this
+function then they must be declared static -- otherwise they will be allocated on
+the stack and so not exists after this function exits. */
+static StaticTask_t xIdleTaskTCB;
+static StackType_t uxIdleTaskStack[ configMINIMAL_STACK_SIZE ];
+
+    /* Pass out a pointer to the StaticTask_t structure in which the Idle task's
+    state will be stored. */
+    *ppxIdleTaskTCBBuffer = &xIdleTaskTCB;
+
+    /* Pass out the array that will be used as the Idle task's stack. */
+    *ppxIdleTaskStackBuffer = uxIdleTaskStack;
+
+    /* Pass out the size of the array pointed to by *ppxIdleTaskStackBuffer.
+    Note that, as the array is necessarily of type StackType_t,
+    configMINIMAL_STACK_SIZE is specified in words, not bytes. */
+    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
+}
+/*-----------------------------------------------------------*/
+
+/* configSUPPORT_STATIC_ALLOCATION and configUSE_TIMERS are both set to 1, so the
+application must provide an implementation of vApplicationGetTimerTaskMemory()
+to provide the memory that is used by the Timer service task. */
+void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer,
+                                     StackType_t **ppxTimerTaskStackBuffer,
+                                     uint32_t *pulTimerTaskStackSize )
+{
+/* If the buffers to be provided to the Timer task are declared inside this
+function then they must be declared static -- otherwise they will be allocated on
+the stack and so not exists after this function exits. */
+static StaticTask_t xTimerTaskTCB;
+static StackType_t uxTimerTaskStack[ configTIMER_TASK_STACK_DEPTH ];
+
+    /* Pass out a pointer to the StaticTask_t structure in which the Timer
+    task's state will be stored. */
+    *ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
+
+    /* Pass out the array that will be used as the Timer task's stack. */
+    *ppxTimerTaskStackBuffer = uxTimerTaskStack;
+
+    /* Pass out the size of the array pointed to by *ppxTimerTaskStackBuffer.
+    Note that, as the array is necessarily of type StackType_t,
+    configTIMER_TASK_STACK_DEPTH is specified in words, not bytes. */
+    *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
+}
+/*-----------------------------------------------------------*/

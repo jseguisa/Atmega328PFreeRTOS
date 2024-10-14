@@ -73,78 +73,51 @@ target_compile_definitions(freertos_config INTERFACE
     -DBAUD=${BAUD}
 )
 
-# # Load all files in src folder
-# file(GLOB SOURCES
-#     src/main.c
-#     src/ParTest/ParTest.c
-#     src/serial/serial.c
-#     src/regtest.c
-#     ${freertos_kernel_SOURCE_DIR}/tasks.c
-#     ${freertos_kernel_SOURCE_DIR}/queue.c
-#     ${freertos_kernel_SOURCE_DIR}/list.c
-#     ${freertos_kernel_SOURCE_DIR}/croutine.c
-#     ${freertos_kernel_SOURCE_DIR}/portable/MemMang/heap_1.c
-#     ${freertos_kernel_SOURCE_DIR}/portable/GCC/ATMega323/port.c
-#     src/Minimal/crflash.c
-#     src/Minimal/integer.c
-#     src/Minimal/PollQ.c
-#     src/Minimal/comtest.c
-# )
+# Load all files in src folder
+file(GLOB SOURCES
+    src/Minimal/integer.c
+    src/Minimal/PollQ.c
+    src/atmel_start.c
+    src/driver_isr.c
+    src/main.c
+    src/ParTest.c
+    src/regtest.c
+    src/driver_init.c
+    src/protected_io.S
+)
 
-# add_avr_executable(${PROJECT_NAME} ${SOURCES})
+add_avr_executable(${PROJECT_NAME} ${SOURCES})
 
-# target_include_directories(${PROJECT_NAME} PRIVATE
-#     include
-#     include/Minimal
-#     ${freertos_kernel_SOURCE_DIR}/include
-#     ${freertos_kernel_SOURCE_DIR}/portable/GCC/ATMega323
-# )
+target_include_directories(${PROJECT_NAME} PRIVATE
+    include
+    include/include
+    include/Minimal
+    include/Config
+    include/utils
+    include/utils/assembler
+    ${freertos_kernel_SOURCE_DIR}/include
+    ${freertos_kernel_SOURCE_DIR}/portable/ThirdParty/GCC/ATmega
+)
 
-# # Compilation flags
-# target_compile_options(${PROJECT_NAME} PRIVATE
-#     -mmcu=${MCU}
-#     -g
-#     -Os
-#     -w
-#     -std=gnu++11
-#     -fno-exceptions
-#     -ffunction-sections
-#     -fdata-sections
-#     -fno-threadsafe-statics
-#     -gdwarf-2
-#     -funsigned-char
-#     -funsigned-bitfields
-#     -fpack-struct
-#     -fshort-enums
-#     -ffunction-sections
-#     -fdata-sections
-#     -fno-split-wide-types
-#     -fno-tree-scev-cprop
-#     -Wall
-#     -Wno-main
-#     -Wundef
-#     -pedantic
-#     -Wstrict-prototypes
-#     -Werror
-#     -Wfatal-errors
-#     -Wl,--relax,--gc-sections
-# )
+# Compilation flags
+get_target_property(FREERTOS_COMPILE_OPTIONS freertos_config INTERFACE_COMPILE_OPTIONS)
+target_compile_options(${PROJECT_NAME} PRIVATE ${FREERTOS_COMPILE_OPTIONS})
 
-# # Pass defines to compiler
-# target_compile_definitions(${PROJECT_NAME} PRIVATE
-#     -DF_CPU=${F_CPU}
-#     -DBAUD=${BAUD}
-# )
+# Pass defines to compiler
+get_target_property(FREERTOS_COMPILE_DEFINITIONS freertos_config INTERFACE_COMPILE_DEFINITIONS)
+target_compile_definitions(${PROJECT_NAME} PRIVATE ${FREERTOS_COMPILE_DEFINITIONS})
 
-# # Linker flags
-# target_link_options(${PROJECT_NAME} PRIVATE
-#     -mmcu=${MCU}
-#     -lc
-#     -lm
-#     -lgcc
-#     -Wl,-lprintf_flt
-#     -Wl,-u,vfprintf
-# )
+# Linker flags
+target_link_options(${PROJECT_NAME} PRIVATE
+    -mmcu=${MCU}
+    -lc
+    -lm
+    -lgcc
+    -Wl,-lprintf_flt
+    -Wl,-u,vfprintf
+)
+
+target_link_libraries(${PROJECT_NAME} freertos_kernel)
 
 
 # The programmer to use, read avrdude manual for list
